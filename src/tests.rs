@@ -337,6 +337,42 @@ pub fn test_generic_surface_creation() {
     device.destroy_context(&mut context).unwrap();
 }
 
+#[cfg(target_os = "macos")]
+#[cfg_attr(not(feature = "sm-test"), test)]
+pub fn test_absurd_iosurface_dimensions_return_surface_creation_error() {
+    let connection = Connection::new().unwrap();
+    let adapter = connection
+        .create_low_power_adapter()
+        .expect("Failed to create adapter!");
+    let device = match connection.create_device(&adapter) {
+        Ok(device) => device,
+        Err(Error::RequiredExtensionUnavailable) => return,
+        Err(error) => panic!("Failed to create device: {:?}", error),
+    };
+
+    let error = match device.0.create_surface(
+        SurfaceAccess::GPUOnly,
+        SurfaceType::Generic {
+            size: Size2D::new(1_000_000, 1_000_000),
+        },
+    ) {
+        Ok(mut surface) => {
+            device.0.destroy_surface(&mut surface).unwrap();
+            None
+        }
+        Err(error) => Some(error),
+    };
+
+    assert!(
+        matches!(
+            &error,
+            Some(Error::SurfaceCreationFailed(WindowingApiError::Failed))
+        ),
+        "expected SurfaceCreationFailed, got {:?}",
+        error
+    );
+}
+
 // Tests that basic GL commands work.
 #[cfg_attr(not(feature = "sm-test"), test)]
 pub fn test_gl() {
