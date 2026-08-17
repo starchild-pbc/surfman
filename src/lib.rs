@@ -29,6 +29,8 @@ mod gl_utils;
 #[cfg(any(android_platform, ohos_platform))]
 pub mod hardware_buffer;
 mod info;
+#[cfg(ios_platform)]
+pub mod ios;
 pub mod macros;
 #[cfg(free_unix)]
 pub mod mesa_surfaceless;
@@ -50,6 +52,8 @@ pub use angle as default;
 pub use cgl as default;
 #[cfg(any(android_platform, ohos_platform))]
 pub use hardware_buffer as default;
+#[cfg(ios_platform)]
+pub use ios as default;
 #[cfg(all(x11_platform, not(wayland_default)))]
 pub use unix as default;
 #[cfg(wayland_default)]
