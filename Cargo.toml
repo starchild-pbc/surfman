@@ -123,7 +123,8 @@ optional = true
 
 # Ensure that we have a static libEGL.lib present for linking with EGL bindings.
 [target.'cfg(target_os = "windows")'.dependencies.mozangle]
-version = "0.5.1"
+git = "https://github.com/starchild-pbc/mozangle.git"
+rev = "677c8d6dc80034c0b4437cf8cf6040147017111d"
 features = ["egl", "build_dlls"]
 optional = true
 
