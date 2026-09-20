@@ -2,7 +2,7 @@
 
 use super::device::Device;
 use super::ffi::{kIOMapDefaultCache, kIOMapWriteCombineCache};
-use crate::{Error, SurfaceAccess, SurfaceID, SurfaceType, SystemSurfaceInfo};
+use crate::{Error, SurfaceAccess, SurfaceID, SurfaceType, SystemSurfaceInfo, WindowingApiError};
 
 use euclid::default::Size2D;
 use libc::KERN_SUCCESS;
@@ -138,13 +138,13 @@ impl Device {
                 }
             };
 
-            let io_surface = self.create_io_surface(&size, access);
+            let io_surface = self.create_io_surface(&size, access)?;
 
             let view_info = match surface_type {
                 SurfaceType::Generic { .. } => None,
                 SurfaceType::Widget {
                     ref native_widget, ..
-                } => Some(self.create_view_info(&size, access, native_widget)),
+                } => Some(self.create_view_info(&size, access, native_widget)?),
             };
 
             Ok(Surface {
@@ -179,8 +179,8 @@ impl Device {
         size: &Size2D<i32>,
         surface_access: SurfaceAccess,
         native_widget: &NativeWidget,
-    ) -> ViewInfo {
-        let front_surface = self.create_io_surface(size, surface_access);
+    ) -> Result<ViewInfo, Error> {
+        let front_surface = self.create_io_surface(size, surface_access)?;
 
         let window = native_widget
             .view
@@ -244,7 +244,7 @@ impl Device {
         let view = native_widget.view.clone();
         CATransaction::commit();
 
-        ViewInfo {
+        Ok(ViewInfo {
             view,
             layer,
             superlayer,
@@ -253,7 +253,7 @@ impl Device {
             display_link,
             next_vblank,
             opaque,
-        }
+        })
     }
 
     /// Destroys a surface.
@@ -290,6 +290,8 @@ impl Device {
             None => return Err(Error::NoWidgetAttached),
             Some(ref mut view_info) => view_info,
         };
+        let front_surface = self.create_io_surface(&size, surface.access)?;
+        let io_surface = self.create_io_surface(&size, surface.access)?;
 
         CATransaction::begin();
         CATransaction::setDisableActions(true);
@@ -316,14 +318,14 @@ impl Device {
             .superlayer
             .setSublayerTransform(sublayer_transform);
 
-        view_info.front_surface = self.create_io_surface(&size, surface.access);
+        view_info.front_surface = front_surface;
         view_info
             .layer
             .setFrame(CGRect::new(CGPoint::ZERO, layer_size));
         view_info.layer.setOpaque(view_info.opaque);
         // TODO: The `contentsOpaque` property does not exist?
         let _: () = unsafe { msg_send![&view_info.layer, setContentsOpaque: view_info.opaque] };
-        surface.io_surface = self.create_io_surface(&size, surface.access);
+        surface.io_surface = io_surface;
         surface.size = size;
 
         CATransaction::commit();
@@ -343,7 +345,7 @@ impl Device {
         &self,
         size: &Size2D<i32>,
         access: SurfaceAccess,
-    ) -> CFRetained<IOSurfaceRef> {
+    ) -> Result<CFRetained<IOSurfaceRef>, Error> {
         let cache_mode = match access {
             SurfaceAccess::GPUCPUWriteCombined => kIOMapWriteCombineCache,
             SurfaceAccess::GPUOnly | SurfaceAccess::GPUCPU => kIOMapDefaultCache,
@@ -391,7 +393,8 @@ impl Device {
             )
             .unwrap();
 
-            IOSurfaceRef::new(&properties).unwrap()
+            IOSurfaceRef::new(&properties)
+                .ok_or(Error::SurfaceCreationFailed(WindowingApiError::Failed))
         }
     }
 

@@ -128,6 +128,47 @@ jobs:
             cargo dinghy all-devices
             cargo dinghy -p auto-android-x86_64-api30 --env RUST_BACKTRACE=${{ env.RUST_BACKTRACE }} test --features "${{ matrix.features }}" -- --test-threads 1 --nocapture
 
+  ios-device-test:
+    name: iPhone 15 device test
+    # GitHub does not give repository secrets to pull requests from forks.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-15
+    timeout-minutes: 45
+    concurrency:
+      group: ios-device-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+      BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+      BROWSERSTACK_BUILD_NAME: surfman-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rust
+        id: toolchain
+        uses: dtolnay/rust-toolchain@1.91.0
+        with:
+          targets: aarch64-apple-ios
+      - name: Build the iOS test app
+        run: ./ios-device-test/build.sh
+      - name: Run on BrowserStack
+        run: |
+          ./ios-device-test/browserstack.sh \
+            target/ios-device-test/surfman-ios-device-test.ipa \
+            target/ios-device-test/artifacts
+      - name: Add the session to the job summary
+        if: always() && hashFiles('target/ios-device-test/artifacts/session-url.txt') != ''
+        run: |
+          printf 'BrowserStack session: %s\n' \
+            "$(cat target/ios-device-test/artifacts/session-url.txt)" \
+            >>"$GITHUB_STEP_SUMMARY"
+      - name: Upload BrowserStack evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-device-test-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/ios-device-test/artifacts
+          if-no-files-found: warn
+
   Format:
     name: Run `rustfmt`
     runs-on: ubuntu-24.04
@@ -138,7 +179,7 @@ jobs:
   build_result:
     name: Result
     runs-on: ubuntu-24.04
-    needs: ["Build", "android-test", "Format"]
+    needs: ["Build", "android-test", "ios-device-test", "Format"]
     if: always()
     steps:
       - name: Mark the job as successful

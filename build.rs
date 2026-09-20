@@ -38,6 +38,21 @@ fn main() {
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap();
     let dest = PathBuf::from(&env::var("OUT_DIR").unwrap());
 
+    if target_os == "ios" {
+        println!("cargo:rerun-if-changed=src/ios/native.h");
+        println!("cargo:rerun-if-changed=src/ios/native.m");
+        cc::Build::new()
+            .file("src/ios/native.m")
+            .flag("-fno-objc-arc")
+            .flag("-Wno-deprecated-declarations")
+            .compile("surfman_ios");
+        println!("cargo:rustc-link-lib=framework=CoreFoundation");
+        println!("cargo:rustc-link-lib=framework=CoreVideo");
+        println!("cargo:rustc-link-lib=framework=Foundation");
+        println!("cargo:rustc-link-lib=framework=IOSurface");
+        println!("cargo:rustc-link-lib=framework=OpenGLES");
+    }
+
     // Generate EGL bindings.
     if target_os == "android"
         || (target_os == "windows" && cfg!(feature = "sm-angle"))
